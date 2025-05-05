@@ -2,18 +2,22 @@ import type {
   DatabaseChangeListener,
   DatabaseExecuteCommand,
   DatabasePersisterConfig,
+  PersistedChanges,
   PersistedStore,
   Persister,
   PersisterListener,
   Persists,
 } from '../../../@types/persisters/index.d.ts';
+import type {Changes} from '../../../@types/store/index.d.ts';
 import {arrayMap} from '../../../common/array.ts';
 import {collHas, collValues} from '../../../common/coll.ts';
 import {getUniqueId} from '../../../common/index.ts';
 import {jsonParse, jsonString} from '../../../common/json.ts';
+import {objDel, objMap} from '../../../common/obj.ts';
 import {ifNotUndefined, promiseAll} from '../../../common/other.ts';
 import {TINYBASE, strMatch} from '../../../common/strings.ts';
 import {
+  DEFAULT_ROW_ID_COLUMN_NAME,
   SELECT,
   TABLE_NAME_PLACEHOLDER,
   WHERE,
@@ -26,7 +30,7 @@ import {createJsonPersister} from './json.ts';
 import {createTabularPersister} from './tabular.ts';
 
 const EVENT_CHANNEL = TINYBASE;
-const EVENT_REGEX = /^([cd]:)(.+)/;
+const EVENT_REGEX = /^([cd]:)(.+?)(?::(.+))?$/;
 
 const CHANGE_DATA_TRIGGER = TINYBASE + '_data';
 const CREATE_TABLE_TRIGGER = TINYBASE + '_table';
@@ -56,6 +60,80 @@ export const createCustomPostgreSqlPersister = <
   const [isJson, , defaultedConfig, managedTableNamesSet] = getConfigStructures(
     configOrStoreTableName,
   );
+
+  const detectChanges = (
+    tableName: string,
+    payload: string | undefined,
+  ): Changes | undefined => {
+    // trigger isn't row change but table change we want to trigger full reload
+    if (!payload) return undefined;
+    // with JSON mode we can always trigger full reload as it's always referring to single row anyways
+    if (isJson) return undefined;
+
+    const {NEW, OLD} = JSON.parse(payload) as {
+      NEW: Record<string, any> | undefined | null;
+      OLD: Record<string, any> | undefined | null;
+    };
+
+    const tabularLoadConfig = defaultedConfig[0];
+    const valuesConfig = defaultedConfig[2];
+    const shouldLoadValues =
+      typeof valuesConfig === 'string' ? true : valuesConfig[0];
+    const valuesTableName =
+      typeof valuesConfig === 'string' ? valuesConfig : valuesConfig[2];
+
+    if (shouldLoadValues && tableName === valuesTableName) {
+      return [
+        {},
+        objMap(objDel(NEW ?? OLD ?? {}, DEFAULT_ROW_ID_COLUMN_NAME), (field) =>
+          jsonParse(field as string),
+        ),
+        1,
+      ];
+    }
+    if (!managedTableNamesSet.has(tableName) || !tabularLoadConfig) {
+      return undefined;
+    }
+
+    const rowIdColumnName =
+      typeof tabularLoadConfig === 'string'
+        ? DEFAULT_ROW_ID_COLUMN_NAME
+        : (tabularLoadConfig.get(tableName)?.[1] ?? DEFAULT_ROW_ID_COLUMN_NAME);
+
+    // row delete
+    if (!NEW && OLD) {
+      const rowId = OLD[rowIdColumnName];
+      return [{[tableName]: {[rowId]: undefined}}, {}, 1];
+    }
+
+    // row insert
+    if (NEW && !OLD) {
+      const rowId = NEW[rowIdColumnName];
+      const row = objMap(objDel(NEW, rowIdColumnName), (field) =>
+        jsonParse(field as string),
+      );
+      return [{[tableName]: {[rowId]: row}}, {}, 1];
+    }
+
+    // row update
+    if (NEW && OLD) {
+      const rowId = NEW[rowIdColumnName];
+      const changedCells: Record<string, any> = {};
+      let hasChanged = false;
+
+      for (const key in NEW) {
+        if (NEW[key] !== OLD[key] && key !== rowIdColumnName) {
+          changedCells[key] = jsonParse(NEW[key]);
+          hasChanged = true;
+        }
+      }
+
+      if (!hasChanged) return undefined;
+      return [{[tableName]: {[rowId]: changedCells}}, {}, 1];
+    }
+
+    return undefined;
+  };
 
   const getWhenCondition = (tableName: string, newOrOld: 'NEW' | 'OLD') => {
     const tablesLoadConfig = defaultedConfig[0];
@@ -99,7 +177,7 @@ export const createCustomPostgreSqlPersister = <
 
     await executeCommand(
       // eslint-disable-next-line max-len
-      `CREATE OR REPLACE FUNCTION ${escapeId(CHANGE_DATA_TRIGGER + '_' + persisterId)}()RETURNS trigger AS $t1$ BEGIN PERFORM pg_notify('${EVENT_CHANNEL + '_' + persisterId}','d:'||TG_TABLE_NAME);RETURN NULL;END;$t1$ LANGUAGE plpgsql;`,
+      `CREATE OR REPLACE FUNCTION ${escapeId(CHANGE_DATA_TRIGGER + '_' + persisterId)}()RETURNS trigger AS $t1$ BEGIN PERFORM pg_notify('${EVENT_CHANNEL + '_' + persisterId}','d:'||TG_TABLE_NAME||':'||json_build_object('NEW',NEW,'OLD',OLD)::text);RETURN NULL;END;$t1$ LANGUAGE plpgsql;`,
     );
     await promiseAll(
       arrayMap(collValues(managedTableNamesSet), async (tableName) => {
@@ -116,12 +194,13 @@ export const createCustomPostgreSqlPersister = <
       async (prefixAndTableName) =>
         await ifNotUndefined(
           strMatch(prefixAndTableName, EVENT_REGEX),
-          async ([, eventType, tableName]) => {
+          async ([, eventType, tableName, payload]) => {
             if (collHas(managedTableNamesSet, tableName)) {
               if (eventType == 'c:') {
                 await addDataTriggers(tableName);
               }
-              listener();
+              const changes = detectChanges(tableName, payload);
+              listener(undefined, changes as PersistedChanges<Persist, false>);
             }
           },
         ),
