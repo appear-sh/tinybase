@@ -100,10 +100,15 @@ export const createCustomPostgreSqlPersister = <
         ? DEFAULT_ROW_ID_COLUMN_NAME
         : (tabularLoadConfig.get(tableName)?.[1] ?? DEFAULT_ROW_ID_COLUMN_NAME);
 
+    const tableId =
+      typeof tabularLoadConfig === 'string'
+        ? tabularLoadConfig
+        : tabularLoadConfig.get(tableName)?.[0] ?? tableName;
+
     // row delete
     if (!NEW && OLD) {
       const rowId = OLD[rowIdColumnName];
-      return [{[tableName]: {[rowId]: undefined}}, {}, 1];
+      return [{[tableId]: {[rowId]: undefined}}, {}, 1];
     }
 
     // row insert
@@ -112,7 +117,7 @@ export const createCustomPostgreSqlPersister = <
       const row = objMap(objDel(NEW, rowIdColumnName), (field) =>
         jsonParse(field as string),
       );
-      return [{[tableName]: {[rowId]: row}}, {}, 1];
+      return [{[tableId]: {[rowId]: row}}, {}, 1];
     }
 
     // row update
@@ -129,7 +134,7 @@ export const createCustomPostgreSqlPersister = <
       }
 
       if (!hasChanged) return undefined;
-      return [{[tableName]: {[rowId]: changedCells}}, {}, 1];
+      return [{[tableId]: {[rowId]: changedCells}}, {}, 1];
     }
 
     return undefined;
