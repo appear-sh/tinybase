@@ -72,6 +72,7 @@ export const getCommandFunctions = (
     deleteEmptyTable: boolean,
     condition: `${string}$tableName${string}` | null,
     partial?: boolean,
+    updatedAtColumnName?: string | null,
   ) => Promise<void>,
   transaction: <Return>(actions: () => Promise<Return>) => Promise<Return>,
 ] => {
@@ -129,8 +130,11 @@ export const getCommandFunctions = (
     deleteEmptyTable: boolean,
     condition: `${string}$tableName${string}` | null = null,
     partial = false,
+    updatedAtColumnName?: string | null,
   ): Promise<void> => {
-    const settingColumnNameSet = setNew<string>();
+    const settingColumnNameSet = setNew<string>(
+      updatedAtColumnName ?? undefined,
+    );
     objMap(content ?? {}, (contentRow) =>
       arrayMap(objIds(contentRow ?? {}), (cellOrValueId) =>
         setAdd(settingColumnNameSet, cellOrValueId),

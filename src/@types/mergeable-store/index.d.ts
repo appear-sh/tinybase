@@ -7,6 +7,9 @@ import type {
   ValueOrUndefined,
 } from '../store/index.d.ts';
 
+/// GetNow
+export type GetNow = () => number;
+
 /// Hash
 export type Hash = number;
 

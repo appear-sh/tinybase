@@ -1,8 +1,9 @@
 import type {Id} from '../@types/common/index.d.ts';
+import type {GetNow} from '../@types/mergeable-store/index.d.ts';
 import {decode, encode} from './codec.ts';
 import {getHash} from './hash.ts';
 import {getUniqueId} from './index.ts';
-import {GLOBAL, ifNotUndefined, isUndefined, mathMax} from './other.ts';
+import {ifNotUndefined, isUndefined, mathMax} from './other.ts';
 
 type Hlc = string;
 // Sortable 16 digit radix-64 string representing 96 bits:
@@ -48,6 +49,7 @@ const decodeTimeAndCounter = (
 
 export const getHlcFunctions = (
   uniqueId?: Id,
+  getNow: GetNow = Date.now,
 ): [getHlc: () => Hlc, seenHlc: (remoteHlc: Hlc) => void] => {
   let logicalTime = 0;
   let lastCounter = -1;
@@ -76,11 +78,7 @@ export const getHlcFunctions = (
     const previousLogicalTime = logicalTime;
     const [remoteLogicalTime, remoteCounter] =
       isUndefined(hlc) || hlc == '' ? [0, 0] : decodeTimeAndCounter(hlc);
-    logicalTime = mathMax(
-      previousLogicalTime,
-      remoteLogicalTime,
-      (GLOBAL as any).HLC_TIME ?? Date.now(),
-    );
+    logicalTime = mathMax(previousLogicalTime, remoteLogicalTime, getNow());
     lastCounter =
       logicalTime == previousLogicalTime
         ? logicalTime == remoteLogicalTime

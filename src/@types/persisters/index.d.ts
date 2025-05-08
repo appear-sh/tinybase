@@ -117,6 +117,8 @@ export type DpcTabularLoad = {
         rowIdColumnName?: string;
         /// DpcTabularLoad.condition
         condition?: `${string}$tableName${string}`;
+        /// DpcTabularLoad.updatedAtColumnName
+        updatedAtColumnName?: string;
       }
     | Id;
 };
@@ -135,6 +137,8 @@ export type DpcTabularSave = {
         deleteEmptyTable?: boolean;
         /// DpcTabularLoad.condition
         condition?: `${string}$tableName${string}`;
+        /// DpcTabularSave.updatedAtColumnName
+        updatedAtColumnName?: string;
       }
     | string;
 };
@@ -147,6 +151,8 @@ export type DpcTabularValues = {
   save?: boolean;
   /// DpcTabularValues.tableName
   tableName?: string;
+  /// DpcTabularValues.updatedAtColumnName
+  updatedAtColumnName?: string;
 };
 
 /// Persister

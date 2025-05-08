@@ -25,6 +25,7 @@ export type DefaultedTabularConfig = [
       tableId: Id,
       rowIdColumnName: string,
       condition: `${string}$tableName${string}` | null,
+      updatedAtColumnName: string | null,
     ]
   >,
   tablesSaveConfig: IdMap<
@@ -34,9 +35,15 @@ export type DefaultedTabularConfig = [
       deleteEmptyColumns: boolean,
       deleteEmptyTable: boolean,
       condition: `${string}$tableName${string}` | null,
+      updatedAtColumnName: string | null,
     ]
   >,
-  valuesConfig: [load: boolean, save: boolean, tableName: string],
+  valuesConfig: [
+    load: boolean,
+    save: boolean,
+    tableName: string,
+    updatedAtColumnName: string | null,
+  ],
 ];
 
 const COLUMN_NAME = 'ColumnName';
@@ -55,6 +62,7 @@ const TABLE_NAME = 'tableName';
 const DELETE_EMPTY_COLUMNS = 'deleteEmptyColumns';
 const DELETE_EMPTY_TABLE = 'deleteEmptyTable';
 const CONDITION = 'condition';
+const UPDATED_AT_COLUMN_NAME = 'updatedAtColumnName';
 const DEFAULT_CONFIG: DatabasePersisterConfig = {
   mode: JSON,
   [AUTO_LOAD_INTERVAL_SECONDS]: 1,
@@ -149,6 +157,7 @@ export const getConfigStructures = (
         [TABLE_ID]: null,
         [ROW_ID_COLUMN_NAME]: DEFAULT_ROW_ID_COLUMN_NAME,
         [CONDITION]: null,
+        [UPDATED_AT_COLUMN_NAME]: null,
       },
       TABLE_ID,
       (tableName) => collHas(excludedTableNames, tableName),
@@ -162,6 +171,7 @@ export const getConfigStructures = (
         [DELETE_EMPTY_COLUMNS]: 0,
         [DELETE_EMPTY_TABLE]: 0,
         [CONDITION]: load[CONDITION] ?? null,
+        [UPDATED_AT_COLUMN_NAME]: null,
       },
       TABLE_NAME,
       (_, tableName) => collHas(excludedTableNames, tableName),
